@@ -22,24 +22,45 @@ app.add_middleware(
 )
 
 DATA_PATH = os.path.join(os.path.dirname(__file__), "data", "full_movies.json")
+ACTIVE_DATA_PATH = os.path.join(os.path.dirname(__file__), "data", "active_catalog.json")
 
-# In-memory movie catalog
+# In-memory movie catalog with disk persistence
 catalog: List[dict] = []
 initial_catalog: List[dict] = []
+
+def save_catalog():
+    """Atomically persists active catalog state to disk to survive server restarts."""
+    try:
+        os.makedirs(os.path.dirname(ACTIVE_DATA_PATH), exist_ok=True)
+        temp_path = ACTIVE_DATA_PATH + ".tmp"
+        with open(temp_path, "w", encoding="utf-8") as f:
+            json.dump(catalog, f, indent=2, ensure_ascii=False)
+        if os.path.exists(ACTIVE_DATA_PATH):
+            os.replace(temp_path, ACTIVE_DATA_PATH)
+        else:
+            os.rename(temp_path, ACTIVE_DATA_PATH)
+    except Exception as e:
+        print(f"Warning: Failed to persist catalog: {e}")
 
 def load_catalog():
     global catalog, initial_catalog
     if os.path.exists(DATA_PATH):
         with open(DATA_PATH, "r", encoding="utf-8") as f:
-            catalog = json.load(f)
-            initial_catalog = list(catalog)
-        print(f"Loaded {len(catalog)} movies into CineMatch catalog.")
+            initial_catalog = json.load(f)
     else:
-        print("Warning: full_movies.json not found, using empty catalog.")
-        catalog = []
         initial_catalog = []
 
+    target = ACTIVE_DATA_PATH if os.path.exists(ACTIVE_DATA_PATH) else DATA_PATH
+    if os.path.exists(target):
+        with open(target, "r", encoding="utf-8") as f:
+            catalog = json.load(f)
+        print(f"Loaded {len(catalog)} movies into CineMatch catalog from {os.path.basename(target)}.")
+    else:
+        print("Warning: Catalog file not found, using empty catalog.")
+        catalog = []
+
 load_catalog()
+
 
 # --- Pydantic Schemas ---
 class MovieBase(BaseModel):
@@ -86,6 +107,13 @@ from fastapi.responses import RedirectResponse
 def root_index():
     return RedirectResponse(url="/docs")
 
+class RecommendPayload(BaseModel):
+    user_id: str = Field(..., min_length=1)
+
+class RatePayload(BaseModel):
+    user_id: str = Field(..., min_length=1)
+    rating: float = Field(..., ge=0.0, le=10.0)
+
 @app.get("/api/health", summary="Health Check")
 def health_check():
     return {
@@ -100,10 +128,11 @@ def get_movies(
     genre: Optional[str] = None,
     search: Optional[str] = None,
     min_rating: Optional[float] = None,
+    sort_by: Optional[str] = Query("rating", description="Sort by: rating, top_rating, recommendations, year, title"),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=500)
 ):
-    results = catalog
+    results = list(catalog)
 
     if search:
         s = search.lower().strip()
@@ -122,6 +151,25 @@ def get_movies(
     if min_rating is not None:
         results = [m for m in results if float(m.get("rating", 0.0)) >= min_rating]
 
+    # Dynamic sorting
+    if sort_by == "top_rating":
+        results.sort(
+            key=lambda m: (
+                float(m.get("rating", 7.0)) * 0.60 +
+                float(m.get("user_rating_average", m.get("rating", 7.0))) * 0.25 +
+                min(1.5, 0.9 + float(m.get("user_recommendations_count", 40)) / 300.0)
+            ),
+            reverse=True
+        )
+    elif sort_by == "recommendations":
+        results.sort(key=lambda m: int(m.get("user_recommendations_count", 0)), reverse=True)
+    elif sort_by == "year":
+        results.sort(key=lambda m: int(m.get("year", 2020)), reverse=True)
+    elif sort_by == "title":
+        results.sort(key=lambda m: str(m.get("title", "")).lower())
+    else: # default: rating
+        results.sort(key=lambda m: float(m.get("rating", 0.0)), reverse=True)
+
     total = len(results)
     sliced = results[skip : skip + limit]
 
@@ -131,6 +179,57 @@ def get_movies(
         "limit": limit,
         "movies": sliced
     }
+
+@app.post("/api/movies/{movie_id}/recommend", summary="Toggle Community Recommendation for Movie")
+def toggle_movie_recommendation(movie_id: str, payload: RecommendPayload):
+    for m in catalog:
+        if m.get("id") == movie_id:
+            users_list = m.setdefault("recommended_by_users", [])
+            user_id = payload.user_id.strip()
+            
+            if user_id in users_list:
+                users_list.remove(user_id)
+                m["user_recommendations_count"] = max(0, int(m.get("user_recommendations_count", 1)) - 1)
+                is_recommended = False
+            else:
+                users_list.append(user_id)
+                m["user_recommendations_count"] = int(m.get("user_recommendations_count", 0)) + 1
+                is_recommended = True
+            
+            save_catalog()
+            return {
+                "message": "Recommendation updated",
+                "movie_id": movie_id,
+                "is_recommended": is_recommended,
+                "user_recommendations_count": m["user_recommendations_count"],
+                "movie": m
+            }
+
+    raise HTTPException(status_code=404, detail=f"Movie with id '{movie_id}' not found")
+
+@app.post("/api/movies/{movie_id}/rate", summary="Submit Community User Rating")
+def submit_user_rating(movie_id: str, payload: RatePayload):
+    for m in catalog:
+        if m.get("id") == movie_id:
+            current_avg = float(m.get("user_rating_average", m.get("rating", 7.0)))
+            current_count = int(m.get("user_ratings_count", 0))
+            
+            new_count = current_count + 1
+            new_avg = round(((current_avg * current_count) + payload.rating) / new_count, 1)
+            
+            m["user_rating_average"] = new_avg
+            m["user_ratings_count"] = new_count
+            
+            save_catalog()
+            return {
+                "message": "Rating submitted successfully",
+                "movie_id": movie_id,
+                "user_rating_average": new_avg,
+                "user_ratings_count": new_count,
+                "movie": m
+            }
+
+    raise HTTPException(status_code=404, detail=f"Movie with id '{movie_id}' not found")
 
 @app.get("/api/movies/{movie_id}", summary="Get Movie by ID")
 def get_movie_by_id(movie_id: str):
@@ -193,6 +292,136 @@ def get_recommendations(
         "recommendations": top_recommendations
     }
 
+@app.get("/api/stats", summary="Catalog Statistics & Analytics")
+def get_stats():
+    """Returns analytics and distribution statistics across the entire movie catalog."""
+    if not catalog:
+        return {"total_movies": 0, "avg_rating": 0.0, "genres": {}, "moods": {}, "decades": {}}
+
+    total = len(catalog)
+    ratings = [float(m.get("rating", 0.0)) for m in catalog]
+    avg_rating = round(sum(ratings) / total, 2) if total > 0 else 0.0
+
+    genre_counts = {}
+    mood_counts = {}
+    decade_counts = {}
+
+    for m in catalog:
+        # Genre breakdown
+        for g in str(m.get("genre", "")).split(","):
+            cleaned = g.strip()
+            if cleaned:
+                genre_counts[cleaned] = genre_counts.get(cleaned, 0) + 1
+
+        # Mood breakdown
+        mood = m.get("mood", "Curious")
+        mood_counts[mood] = mood_counts.get(mood, 0) + 1
+
+        # Decade breakdown
+        year = int(m.get("year", 2020))
+        decade = f"{(year // 10) * 10}s"
+        decade_counts[decade] = decade_counts.get(decade, 0) + 1
+
+    # Top 3 rated movies
+    sorted_by_rating = sorted(catalog, key=lambda x: float(x.get("rating", 0.0)), reverse=True)
+    top_rated = [
+        {"id": m.get("id"), "title": m.get("title"), "rating": m.get("rating"), "year": m.get("year")}
+        for m in sorted_by_rating[:5]
+    ]
+
+    return {
+        "total_movies": total,
+        "avg_rating": avg_rating,
+        "genres": dict(sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)[:10]),
+        "moods": mood_counts,
+        "decades": dict(sorted(decade_counts.items())),
+        "top_rated": top_rated
+    }
+
+@app.get("/api/genres", summary="List All Unique Genres")
+def get_genres():
+    """Returns all unique genre tags available in the dataset."""
+    genres_set = set()
+    for m in catalog:
+        for g in str(m.get("genre", "")).split(","):
+            cleaned = g.strip()
+            if cleaned:
+                genres_set.add(cleaned)
+    return {"genres": sorted(list(genres_set))}
+
+@app.get("/api/moods", summary="List All Available Moods")
+def get_moods():
+    """Returns all available mood classifications."""
+    moods_set = {m.get("mood", "Curious") for m in catalog if m.get("mood")}
+    return {"moods": sorted(list(moods_set))}
+
+@app.get("/api/movies/{movie_id}/similar", summary="Multi-Attribute Similar Movie Recommendations")
+def get_similar_movies(movie_id: str, limit: int = Query(6, ge=1, le=20)):
+    """Computes hybrid similarity against the target movie based on genre overlap, director, mood, era, and rating."""
+    target = None
+    for m in catalog:
+        if m.get("id") == movie_id:
+            target = m
+            break
+
+    if not target:
+        raise HTTPException(status_code=404, detail=f"Target movie '{movie_id}' not found")
+
+    target_genres = {g.strip().lower() for g in str(target.get("genre", "")).split(",") if g.strip()}
+    target_director = str(target.get("director", "")).lower()
+    target_mood = str(target.get("mood", "")).lower()
+    target_year = int(target.get("year", 2020))
+    target_rating = float(target.get("rating", 7.0))
+
+    scored = []
+    for m in catalog:
+        if m.get("id") == movie_id:
+            continue
+
+        item_genres = {g.strip().lower() for g in str(m.get("genre", "")).split(",") if g.strip()}
+        
+        # 1. Genre Jaccard Similarity (Weight: 45%)
+        intersection = len(target_genres & item_genres)
+        union = len(target_genres | item_genres) or 1
+        jaccard = intersection / union
+
+        # 2. Director match bonus (Weight: 20%)
+        director_match = 1.0 if target_director and target_director == str(m.get("director", "")).lower() else 0.0
+
+        # 3. Mood similarity (Weight: 15%)
+        mood_match = 1.0 if target_mood and target_mood == str(m.get("mood", "")).lower() else 0.0
+
+        # 4. Era proximity (Weight: 10%)
+        item_year = int(m.get("year", 2020))
+        year_diff = abs(target_year - item_year)
+        era_similarity = max(0.0, 1.0 - (year_diff / 40.0))
+
+        # 5. Rating proximity (Weight: 10%)
+        item_rating = float(m.get("rating", 7.0))
+        rating_diff = abs(target_rating - item_rating)
+        rating_similarity = max(0.0, 1.0 - (rating_diff / 5.0))
+
+        # Combined similarity index in percentage
+        similarity_index = (
+            (jaccard * 45.0) +
+            (director_match * 20.0) +
+            (mood_match * 15.0) +
+            (era_similarity * 10.0) +
+            (rating_similarity * 10.0)
+        )
+
+        item = dict(m)
+        item["similarity_score"] = round(similarity_index, 1)
+        scored.append(item)
+
+    scored.sort(key=lambda x: (x["similarity_score"], float(x.get("rating", 0.0))), reverse=True)
+    return {
+        "target_id": movie_id,
+        "target_title": target.get("title"),
+        "count": min(limit, len(scored)),
+        "similar_movies": scored[:limit]
+    }
+
 @app.post("/api/movies", status_code=status.HTTP_201_CREATED, summary="Add New Movie")
 def create_movie(payload: MovieCreate):
     new_id = f"custom_{uuid.uuid4().hex[:8]}"
@@ -218,6 +447,7 @@ def create_movie(payload: MovieCreate):
 
     # Prepend to catalog so new additions appear prominently
     catalog.insert(0, new_movie)
+    save_catalog()
     return new_movie
 
 @app.put("/api/movies/{movie_id}", summary="Update Movie Details")
@@ -240,6 +470,7 @@ def update_movie(movie_id: str, payload: MovieUpdate):
                 updated["poster_url"] = payload.poster_url
 
             catalog[i] = updated
+            save_catalog()
             return updated
 
     raise HTTPException(status_code=404, detail=f"Movie with id '{movie_id}' not found")
@@ -249,6 +480,7 @@ def delete_movie(movie_id: str):
     for i, m in enumerate(catalog):
         if m.get("id") == movie_id:
             removed = catalog.pop(i)
+            save_catalog()
             return {"message": "Movie deleted successfully", "deleted_movie": removed}
     raise HTTPException(status_code=404, detail=f"Movie with id '{movie_id}' not found")
 
@@ -256,8 +488,10 @@ def delete_movie(movie_id: str):
 def reset_catalog():
     global catalog
     catalog = list(initial_catalog)
+    save_catalog()
     return {"message": "Catalog reset to default dataset", "total_movies": len(catalog)}
 
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("backend.main:app", host="0.0.0.0", port=8000, reload=True)
+

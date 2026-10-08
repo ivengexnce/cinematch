@@ -59,13 +59,22 @@ class PosterImage extends StatelessWidget {
       child: Stack(
         children: [
           Center(
-            child: Text(
-              initials.isNotEmpty ? initials : 'CM',
-              style: TextStyle(
-                fontFamily: AppTheme.fontDisplay,
-                fontSize: 44,
-                fontWeight: FontWeight.w700,
-                color: Colors.white.withValues(alpha: 0.05),
+            child: Opacity(
+              opacity: 0.25,
+              child: Image.asset(
+                'assets/images/app_logo.png',
+                width: (width != null && width! < 100) ? 36 : 64,
+                height: (height != null && height! < 140) ? 36 : 64,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => Text(
+                  initials.isNotEmpty ? initials : 'CM',
+                  style: TextStyle(
+                    fontFamily: AppTheme.fontDisplay,
+                    fontSize: 44,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white.withValues(alpha: 0.05),
+                  ),
+                ),
               ),
             ),
           ),

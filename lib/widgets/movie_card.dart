@@ -153,14 +153,26 @@ class _MovieCardState extends State<MovieCard> {
                                   color: Colors.black.withValues(alpha: 0.85),
                                   border: Border.all(color: AppTheme.borderLight, width: 0.8),
                                 ),
-                                child: Text(
-                                  '★ ${movie.rating.toStringAsFixed(1)}',
-                                  style: const TextStyle(
-                                    fontFamily: AppTheme.fontMono,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppTheme.ratingStar,
-                                  ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Text(
+                                      '★ ',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: AppTheme.ratingStar,
+                                      ),
+                                    ),
+                                    Text(
+                                      movie.rating.toStringAsFixed(1),
+                                      style: const TextStyle(
+                                        fontFamily: AppTheme.fontMono,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppTheme.ratingStar,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                               if (widget.showScore)
@@ -179,6 +191,34 @@ class _MovieCardState extends State<MovieCard> {
                                       color: AppTheme.accentVermilion,
                                       letterSpacing: 0.5,
                                     ),
+                                  ),
+                                )
+                              else
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.background.withValues(alpha: 0.88),
+                                    border: Border.all(color: AppTheme.borderLight, width: 0.8),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(
+                                        Icons.thumb_up_alt,
+                                        size: 9,
+                                        color: AppTheme.cyberAmber,
+                                      ),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        '${movie.userRecommendationsCount}',
+                                        style: const TextStyle(
+                                          fontFamily: AppTheme.fontMono,
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w700,
+                                          color: AppTheme.cyberAmber,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                             ],
@@ -222,6 +262,36 @@ class _MovieCardState extends State<MovieCard> {
                             fontSize: 9,
                             letterSpacing: 0.5,
                           ),
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: AppTheme.cyberAmber.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                              child: Text(
+                                'TOP ${movie.compositeTopRating.toStringAsFixed(1)}',
+                                style: const TextStyle(
+                                  fontFamily: AppTheme.fontMono,
+                                  fontSize: 8.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppTheme.cyberAmber,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              '${movie.userRecommendationsCount} recs',
+                              style: const TextStyle(
+                                fontFamily: AppTheme.fontMono,
+                                fontSize: 8.5,
+                                color: AppTheme.textMuted,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),

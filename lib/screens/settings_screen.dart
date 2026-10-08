@@ -14,6 +14,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late TextEditingController _urlCtrl;
   bool _forceOffline = false;
   Map<String, dynamic>? _health;
+  Map<String, dynamic>? _stats;
   bool _isPinging = false;
   String? _pingError;
 
@@ -35,7 +36,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() { _isPinging = true; _pingError = null; });
     try {
       final res = await _apiService.checkHealth();
-      if (mounted) setState(() { _health = res; _isPinging = false; });
+      final stats = await _apiService.getCatalogStats();
+      if (mounted) setState(() { _health = res; _stats = stats; _isPinging = false; });
     } catch (e) {
       if (mounted) setState(() { _pingError = e.toString(); _isPinging = false; });
     }
@@ -211,8 +213,47 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
 
+          if (_stats != null) ...[
+            const SizedBox(height: 24),
+            _section('3. CATALOG ANALYTICS & INSIGHTS'),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(color: AppTheme.surface, border: Border.all(color: AppTheme.borderLight)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _metricBox('TOTAL FILMS', '${_stats!['total_movies'] ?? 1000}'),
+                      _metricBox('AVG RATING', '★ ${_stats!['avg_rating'] ?? 7.5}'),
+                      _metricBox('LATENCY', _health?['latency_ms'] != null ? '${_health!['latency_ms']} ms' : '0 ms'),
+                    ],
+                  ),
+                  if (_stats!['genres'] != null && (_stats!['genres'] as Map).isNotEmpty) ...[
+                    const SizedBox(height: 14),
+                    const Text('TOP GENRES IN VAULT:', style: TextStyle(fontFamily: AppTheme.fontMono, color: AppTheme.textSecondary, fontSize: 10, fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: (_stats!['genres'] as Map<String, dynamic>).entries.take(6).map((e) {
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(color: AppTheme.background, border: Border.all(color: AppTheme.borderLight)),
+                          child: Text('${e.key.toUpperCase()}: ${e.value}', style: const TextStyle(fontFamily: AppTheme.fontMono, fontSize: 10, color: AppTheme.textPrimary)),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+
           const SizedBox(height: 24),
-          _section('3. ABOUT CINEMATCH (PRACTICAL 12)'),
+          _section('4. ABOUT CINEMATCH (PRACTICAL 12)'),
           const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.all(14),
@@ -220,17 +261,54 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Row(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.asset(
+                        'assets/images/app_logo.png',
+                        width: 44,
+                        height: 44,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => const Icon(Icons.movie_filter, color: AppTheme.accentVermilion, size: 36),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('CINEMATCH', style: TextStyle(fontFamily: AppTheme.fontDisplay, fontSize: 16, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
+                        const SizedBox(height: 2),
+                        Text('GEN Z MOVIE VAULT • V1.0', style: AppTheme.monoTag.copyWith(fontSize: 9, color: AppTheme.accentVermilion)),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                const Divider(color: AppTheme.borderLight, height: 1),
+                const SizedBox(height: 14),
                 _infoRow('DATASET', 'Kaggle IMDB 1,000 Movies'),
-                _infoRow('FRONTEND', 'Flutter 3 (Models, Services, Screens, Widgets)'),
-                _infoRow('BACKEND', 'Python FastAPI Backend (:8000)'),
-                _infoRow('STORAGE', 'Firebase Cloud Storage (Posters)'),
-                _infoRow('SCORING', 'Mood, genre, and rating match formula'),
+                _infoRow('FRONTEND', 'Flutter 3 (Clean Layered Architecture)'),
+                _infoRow('BACKEND', 'Python FastAPI ASGI Service (:8000)'),
+                _infoRow('STORAGE', 'Firebase Cloud Storage (CDN & Posters)'),
+                _infoRow('SCORING', 'Multi-Factor Mood, Genre & Rating Match Engine'),
               ],
             ),
           ),
           const SizedBox(height: 40),
         ],
       ),
+    );
+  }
+
+  Widget _metricBox(String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(value, style: const TextStyle(fontFamily: AppTheme.fontMono, color: AppTheme.accentVermilion, fontWeight: FontWeight.w700, fontSize: 14)),
+        const SizedBox(height: 2),
+        Text(label, style: const TextStyle(fontFamily: AppTheme.fontMono, color: AppTheme.textSecondary, fontSize: 9, letterSpacing: 0.5)),
+      ],
     );
   }
 }

@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import '../models/movie.dart';
 import '../services/api_service.dart';
+import '../services/auth_service.dart';
 import '../services/watchlist_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/movie_card.dart';
@@ -23,6 +24,7 @@ class _HomeScreenState extends State<HomeScreen>
   late final TabController _tabController;
   final ApiService _apiService = ApiService();
   final WatchlistService _watchlist = WatchlistService();
+  final AuthService _auth = AuthService();
 
   // Recommendations State
   String _selectedMood = 'Adrenaline';
@@ -34,11 +36,17 @@ class _HomeScreenState extends State<HomeScreen>
   List<Movie> _catalogMovies = [];
   bool _isLoadingCatalog = false;
   String _catalogSearch = '';
-  String _catalogSort = 'rating';
+  String _catalogGenre = 'All';
+  String _catalogSort = 'top_rating';
   double _minRating = 0.0;
   final TextEditingController _searchController = TextEditingController();
 
   bool _isServerOnline = false;
+  int? _serverLatencyMs;
+
+  static const List<String> _catalogGenres = [
+    'All', 'Action', 'Adventure', 'Sci-Fi', 'Drama', 'Comedy', 'Thriller', 'Crime', 'Horror', 'Mystery'
+  ];
 
   @override
   void initState() {
@@ -70,7 +78,12 @@ class _HomeScreenState extends State<HomeScreen>
     _fetchRecommendations();
     _fetchCatalog();
     _apiService.checkHealth().then((health) {
-      if (mounted) setState(() => _isServerOnline = health['is_remote'] == true);
+      if (mounted) {
+        setState(() {
+          _isServerOnline = health['is_remote'] == true;
+          _serverLatencyMs = health['latency_ms'] as int?;
+        });
+      }
     });
   }
 
@@ -97,15 +110,24 @@ class _HomeScreenState extends State<HomeScreen>
     try {
       final movies = await _apiService.getMovies(
         search: _catalogSearch,
-        genre: 'All',
+        genre: _catalogGenre,
         minRating: _minRating > 0 ? _minRating : null,
+        sortBy: _catalogSort,
         limit: 50,
       );
       if (mounted) {
         final sorted = List<Movie>.from(movies);
-        if (_catalogSort == 'rating') sorted.sort((a, b) => b.rating.compareTo(a.rating));
-        if (_catalogSort == 'year') sorted.sort((a, b) => b.year.compareTo(a.year));
-        if (_catalogSort == 'title') sorted.sort((a, b) => a.title.compareTo(b.title));
+        if (_catalogSort == 'top_rating') {
+          sorted.sort((a, b) => b.compositeTopRating.compareTo(a.compositeTopRating));
+        } else if (_catalogSort == 'recommendations') {
+          sorted.sort((a, b) => b.userRecommendationsCount.compareTo(a.userRecommendationsCount));
+        } else if (_catalogSort == 'rating') {
+          sorted.sort((a, b) => b.rating.compareTo(a.rating));
+        } else if (_catalogSort == 'year') {
+          sorted.sort((a, b) => b.year.compareTo(a.year));
+        } else if (_catalogSort == 'title') {
+          sorted.sort((a, b) => a.title.compareTo(b.title));
+        }
         setState(() { _catalogMovies = sorted; _isLoadingCatalog = false; });
       }
     } catch (_) {
@@ -219,6 +241,176 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
+  void _showUserProfileDialog() {
+    final nameCtrl = TextEditingController(text: _auth.currentUser.name);
+    final handleCtrl = TextEditingController(text: _auth.currentUser.handle.replaceAll('@', ''));
+    final emailCtrl = TextEditingController(text: _auth.currentUser.email);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surfaceElevated,
+        shape: const RoundedRectangleBorder(
+          side: BorderSide(color: AppTheme.borderLight),
+        ),
+        title: Row(
+          children: [
+            const Icon(Icons.person, color: AppTheme.accentVermilion, size: 20),
+            const SizedBox(width: 8),
+            Text('USER PROFILE & COMMUNITY STATS', style: AppTheme.monoTag.copyWith(color: AppTheme.textPrimary)),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.background,
+                  border: Border.all(color: AppTheme.borderLight),
+                ),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 22,
+                      backgroundColor: AppTheme.accentVermilion,
+                      child: Text(
+                        _auth.currentUser.name.isNotEmpty ? _auth.currentUser.name[0].toUpperCase() : 'U',
+                        style: const TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _auth.currentUser.name,
+                            style: const TextStyle(
+                              fontFamily: AppTheme.fontDisplay,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.textPrimary,
+                            ),
+                          ),
+                          Text(
+                            _auth.currentUser.handle,
+                            style: const TextStyle(
+                              fontFamily: AppTheme.fontMono,
+                              fontSize: 11,
+                              color: AppTheme.accentVermilion,
+                            ),
+                          ),
+                          Text(
+                            _auth.currentUser.email,
+                            style: const TextStyle(
+                              fontFamily: AppTheme.fontMono,
+                              fontSize: 10,
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppTheme.surface,
+                        border: Border.all(color: AppTheme.borderLight),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('RECOMMENDED', style: TextStyle(fontFamily: AppTheme.fontMono, fontSize: 8.5, color: AppTheme.textSecondary)),
+                          const SizedBox(height: 4),
+                          Text(
+                            '🔥 ${_auth.recommendationsCount} films',
+                            style: const TextStyle(fontFamily: AppTheme.fontMono, fontSize: 13, fontWeight: FontWeight.w700, color: AppTheme.cyberAmber),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppTheme.surface,
+                        border: Border.all(color: AppTheme.borderLight),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('PERSONAL RATINGS', style: TextStyle(fontFamily: AppTheme.fontMono, fontSize: 8.5, color: AppTheme.textSecondary)),
+                          const SizedBox(height: 4),
+                          Text(
+                            '★ ${_auth.ratingsCount} ratings',
+                            style: const TextStyle(fontFamily: AppTheme.fontMono, fontSize: 13, fontWeight: FontWeight.w700, color: AppTheme.ratingStar),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              const Text('UPDATE USER / LOGIN INFO', style: AppTheme.monoTag),
+              const SizedBox(height: 10),
+              TextField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(labelText: 'Display Name'),
+                style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: handleCtrl,
+                decoration: const InputDecoration(labelText: 'Handle (e.g. alex_cine)', prefixText: '@'),
+                style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: emailCtrl,
+                decoration: const InputDecoration(labelText: 'Account Email'),
+                style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          OutlinedButton(onPressed: () => Navigator.pop(ctx), child: const Text('CANCEL')),
+          ElevatedButton(
+            onPressed: () {
+              _auth.login(
+                name: nameCtrl.text.trim(),
+                handle: handleCtrl.text.trim(),
+                email: emailCtrl.text.trim(),
+              );
+              Navigator.pop(ctx);
+              setState(() {});
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  backgroundColor: AppTheme.surfaceElevated,
+                  content: Text('Profile updated & synchronized with community ratings!', style: AppTheme.monoTag),
+                ),
+              );
+            },
+            child: const Text('SAVE & LOGIN'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -227,14 +419,25 @@ class _HomeScreenState extends State<HomeScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('CINEMATCH', style: TextStyle(fontFamily: AppTheme.fontDisplay, fontSize: 20, fontWeight: FontWeight.w700)),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: Image.asset(
+                    'assets/images/app_logo.png',
+                    width: 26,
+                    height: 26,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => const Icon(Icons.movie_filter, color: AppTheme.accentVermilion, size: 22),
+                  ),
+                ),
                 const SizedBox(width: 8),
-                Text('• MOVIE RECOMMENDATIONS', style: AppTheme.monoTag.copyWith(color: AppTheme.textSecondary.withValues(alpha: 0.8))),
+                const Text('CINEMATCH', style: TextStyle(fontFamily: AppTheme.fontDisplay, fontSize: 18, fontWeight: FontWeight.w700)),
               ],
             ),
             const SizedBox(height: 2),
             Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
                   width: 5,
@@ -246,14 +449,78 @@ class _HomeScreenState extends State<HomeScreen>
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  _isServerOnline ? 'FASTAPI BACKEND ONLINE' : 'OFFLINE MODE (IN-APP ENGINE)',
-                  style: AppTheme.monoTag.copyWith(fontSize: 9, color: AppTheme.textMuted),
+                  _isServerOnline
+                      ? (_serverLatencyMs != null
+                          ? 'FASTAPI ONLINE (${_serverLatencyMs}ms)'
+                          : 'FASTAPI ONLINE')
+                      : 'OFFLINE ENGINE',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTheme.monoTag.copyWith(fontSize: 8.5, color: AppTheme.textMuted),
                 ),
               ],
             ),
           ],
         ),
         actions: [
+          AnimatedBuilder(
+            animation: _auth,
+            builder: (context, _) {
+              final user = _auth.currentUser;
+              return InkWell(
+                onTap: _showUserProfileDialog,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surface,
+                    border: Border.all(color: AppTheme.borderLight),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircleAvatar(
+                        radius: 10,
+                        backgroundColor: AppTheme.accentVermilion,
+                        child: Text(
+                          user.name.isNotEmpty ? user.name[0].toUpperCase() : 'U',
+                          style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        user.handle,
+                        style: const TextStyle(
+                          fontFamily: AppTheme.fontMono,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: AppTheme.cyberAmber.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                        child: Text(
+                          '${_auth.recommendationsCount} recs',
+                          style: const TextStyle(
+                            fontFamily: AppTheme.fontMono,
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.cyberAmber,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(width: 8),
           OutlinedButton(
             style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
             onPressed: () async {
@@ -422,6 +689,43 @@ class _HomeScreenState extends State<HomeScreen>
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
+                  SizedBox(
+                    height: 32,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: _catalogGenres.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 6),
+                      itemBuilder: (context, index) {
+                        final g = _catalogGenres[index];
+                        final isSelected = _catalogGenre.toLowerCase() == g.toLowerCase();
+                        return InkWell(
+                          onTap: () {
+                            setState(() => _catalogGenre = g);
+                            _fetchCatalog();
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: isSelected ? AppTheme.accentVermilion : AppTheme.surface,
+                              border: Border.all(
+                                color: isSelected ? AppTheme.accentVermilion : AppTheme.borderLight,
+                              ),
+                            ),
+                            child: Text(
+                              g.toUpperCase(),
+                              style: TextStyle(
+                                fontFamily: AppTheme.fontMono,
+                                fontSize: 10,
+                                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                                color: isSelected ? Colors.white : AppTheme.textPrimary,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   TextField(
                     controller: _searchController,
                     style: const TextStyle(color: AppTheme.textPrimary),
@@ -456,7 +760,9 @@ class _HomeScreenState extends State<HomeScreen>
                           underline: const SizedBox(),
                           style: AppTheme.monoTag.copyWith(color: AppTheme.textPrimary),
                           items: const [
-                            DropdownMenuItem(value: 'rating', child: Text('Rating: Highest')),
+                            DropdownMenuItem(value: 'top_rating', child: Text('★ Top Rated (Community + IMDb)')),
+                            DropdownMenuItem(value: 'recommendations', child: Text('🔥 Most Recommended')),
+                            DropdownMenuItem(value: 'rating', child: Text('IMDb: Highest')),
                             DropdownMenuItem(value: 'year', child: Text('Release Year')),
                             DropdownMenuItem(value: 'title', child: Text('Title: A–Z')),
                           ],
@@ -545,7 +851,34 @@ class _HomeScreenState extends State<HomeScreen>
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Text('MY SAVED MOVIES', style: AppTheme.monoTag),
-                    Text('${items.length} MOVIES', style: AppTheme.monoTag.copyWith(color: AppTheme.textMuted)),
+                    Row(
+                      children: [
+                        Text('${items.length} MOVIES', style: AppTheme.monoTag.copyWith(color: AppTheme.textMuted)),
+                        const SizedBox(width: 12),
+                        InkWell(
+                          onTap: () async {
+                            final confirm = await showDialog<bool>(
+                              context: context,
+                              builder: (ctx) => AlertDialog(
+                                backgroundColor: AppTheme.surfaceElevated,
+                                title: const Text('CLEAR WATCHLIST?', style: AppTheme.monoTag),
+                                content: const Text('Are you sure you want to remove all saved movies from your watchlist?', style: AppTheme.bodyRegular),
+                                actions: [
+                                  OutlinedButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('CANCEL')),
+                                  ElevatedButton(
+                                    style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accentVermilion),
+                                    onPressed: () => Navigator.pop(ctx, true),
+                                    child: const Text('CLEAR ALL'),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (confirm == true) _watchlist.clear();
+                          },
+                          child: const Text('CLEAR ALL', style: TextStyle(fontFamily: AppTheme.fontMono, fontSize: 10, color: AppTheme.accentVermilion, fontWeight: FontWeight.w700)),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),

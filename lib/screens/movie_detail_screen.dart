@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../models/movie.dart';
 import '../services/api_service.dart';
+import '../services/auth_service.dart';
 import '../services/watchlist_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/movie_card.dart';
@@ -18,6 +20,7 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
   late Movie _currentMovie;
   final ApiService _apiService = ApiService();
   final WatchlistService _watchlistService = WatchlistService();
+  final AuthService _authService = AuthService();
   bool _isActionInProgress = false;
   List<Movie> _similarMovies = [];
 
@@ -34,6 +37,14 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
   }
 
   Future<void> _fetchSimilarMovies() async {
+    try {
+      final list = await _apiService.getSimilarMovies(_currentMovie.id, limit: 8);
+      if (mounted && list.isNotEmpty) {
+        setState(() => _similarMovies = list);
+        return;
+      }
+    } catch (_) {}
+
     try {
       final genre = _currentMovie.genresList.isNotEmpty ? _currentMovie.genresList.first : 'Action';
       final list = await _apiService.getMovies(genre: genre, limit: 8);
@@ -136,6 +147,158 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                 }
               },
               child: const Text('SUBMIT'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _toggleUserRecommendation() async {
+    final user = _authService.currentUser;
+    final nowRecommended = _authService.toggleRecommendation(_currentMovie.id);
+
+    final currentRecs = _currentMovie.userRecommendationsCount;
+    final newCount = nowRecommended ? currentRecs + 1 : (currentRecs > 0 ? currentRecs - 1 : 0);
+    final updatedUsers = List<String>.from(_currentMovie.recommendedByUsers);
+    if (nowRecommended) {
+      if (!updatedUsers.contains(user.id)) updatedUsers.add(user.id);
+    } else {
+      updatedUsers.remove(user.id);
+    }
+
+    setState(() {
+      _currentMovie = _currentMovie.copyWith(
+        userRecommendationsCount: newCount,
+        recommendedByUsers: updatedUsers,
+      );
+    });
+
+    try {
+      final res = await _apiService.toggleRecommendation(_currentMovie.id, user.id);
+      if (res['movie'] != null && mounted) {
+        setState(() {
+          _currentMovie = Movie.fromJson(res['movie']);
+        });
+      }
+    } catch (_) {}
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: AppTheme.surfaceElevated,
+          content: Text(
+            nowRecommended
+                ? '👍 Recommended "${_currentMovie.title}" to the CineMatch community!'
+                : 'Removed recommendation for "${_currentMovie.title}".',
+            style: AppTheme.monoTag,
+          ),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  void _showRateFilmDialog() {
+    final currentRating = _authService.getUserRating(_currentMovie.id) ?? (_currentMovie.userRatingAverage ?? 8.0);
+    double selectedRating = currentRating;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: AppTheme.surfaceElevated,
+          shape: const RoundedRectangleBorder(side: BorderSide(color: AppTheme.borderLight)),
+          title: Row(
+            children: [
+              const Icon(Icons.star, color: AppTheme.cyberAmber, size: 18),
+              const SizedBox(width: 8),
+              Text('RATE THIS FILM', style: AppTheme.monoTag.copyWith(color: AppTheme.textPrimary)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Rate "${_currentMovie.title}" (${_currentMovie.year})',
+                style: AppTheme.bodyRegular.copyWith(fontWeight: FontWeight.w600, fontSize: 13),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('YOUR SCORE:', style: TextStyle(fontFamily: AppTheme.fontMono, fontSize: 11, color: AppTheme.textSecondary)),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: AppTheme.cyberAmber.withValues(alpha: 0.15),
+                      border: Border.all(color: AppTheme.cyberAmber),
+                    ),
+                    child: Text(
+                      '★ ${selectedRating.toStringAsFixed(1)} / 10',
+                      style: const TextStyle(
+                        fontFamily: AppTheme.fontMono,
+                        color: AppTheme.cyberAmber,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Slider(
+                value: selectedRating,
+                min: 1.0,
+                max: 10.0,
+                divisions: 18,
+                activeColor: AppTheme.cyberAmber,
+                inactiveColor: AppTheme.borderLight,
+                onChanged: (val) => setDialogState(() => selectedRating = val),
+              ),
+              const SizedBox(height: 4),
+              const Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('1.0 Poor', style: TextStyle(fontFamily: AppTheme.fontMono, fontSize: 9, color: AppTheme.textMuted)),
+                  Text('10.0 Masterpiece', style: TextStyle(fontFamily: AppTheme.fontMono, fontSize: 9, color: AppTheme.textMuted)),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            OutlinedButton(onPressed: () => Navigator.pop(ctx), child: const Text('CANCEL')),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(ctx);
+                _authService.setUserRating(_currentMovie.id, selectedRating);
+                final res = await _apiService.submitUserRating(_currentMovie.id, _authService.currentUser.id, selectedRating);
+                if (res['movie'] != null && mounted) {
+                  setState(() {
+                    _currentMovie = Movie.fromJson(res['movie']);
+                  });
+                } else if (mounted) {
+                  final curCount = _currentMovie.userRatingsCount + 1;
+                  final curAvg = double.parse(((((_currentMovie.userRatingAverage ?? _currentMovie.rating) * _currentMovie.userRatingsCount) + selectedRating) / curCount).toStringAsFixed(1));
+                  setState(() {
+                    _currentMovie = _currentMovie.copyWith(userRatingAverage: curAvg, userRatingsCount: curCount);
+                  });
+                }
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      backgroundColor: AppTheme.surfaceElevated,
+                      content: Text(
+                        '★ Rated ${selectedRating.toStringAsFixed(1)}/10! Top community rating refreshed.',
+                        style: AppTheme.monoTag,
+                      ),
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                }
+              },
+              child: const Text('SUBMIT RATING'),
             ),
           ],
         ),
@@ -272,6 +435,22 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                         );
                       },
                     ),
+                    _actionBtn(
+                      icon: Icons.share_outlined,
+                      tooltip: 'Copy Info to Clipboard',
+                      onTap: () {
+                        Clipboard.setData(ClipboardData(
+                          text: '${_currentMovie.title} (${_currentMovie.year})\nRating: ${_currentMovie.rating}/10 ★\nDirector: ${_currentMovie.director}\nGenre: ${_currentMovie.genre}\n\n${_currentMovie.synopsis}',
+                        ));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            backgroundColor: AppTheme.surfaceElevated,
+                            content: Text('Movie details copied to clipboard.', style: AppTheme.monoTag),
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      },
+                    ),
                     _actionBtn(icon: Icons.edit_outlined, tooltip: 'Edit Movie (PUT)', onTap: _showEditDialog),
                     _actionBtn(icon: Icons.delete_outline, color: AppTheme.accentVermilion, tooltip: 'Delete Movie (DELETE)', onTap: _confirmDelete),
                     const SizedBox(width: 10),
@@ -348,7 +527,9 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                             );
                           }).toList(),
                         ),
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 20),
+
+                        _buildCommunityRatingCard(),
 
                         if (_currentMovie.scoreBreakdown != null) _buildMatchBreakdown(),
 
@@ -495,6 +676,236 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
         Text(value, style: const TextStyle(fontFamily: AppTheme.fontMono, color: AppTheme.textPrimary, fontWeight: FontWeight.w700, fontSize: 13)),
         const SizedBox(height: 2),
         Text(label, style: const TextStyle(fontFamily: AppTheme.fontMono, color: AppTheme.textSecondary, fontSize: 9, letterSpacing: 0.5)),
+      ],
+    );
+  }
+
+  Widget _buildCommunityRatingCard() {
+    return AnimatedBuilder(
+      animation: _authService,
+      builder: (context, _) {
+        final isUserRecommended = _authService.hasRecommended(_currentMovie.id);
+        final userPersonalRating = _authService.getUserRating(_currentMovie.id);
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 24),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppTheme.surface,
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(
+              color: isUserRecommended
+                  ? AppTheme.accentVermilion.withValues(alpha: 0.8)
+                  : AppTheme.borderLight,
+              width: 1.2,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.people_alt_outlined, size: 16, color: AppTheme.cyberAmber),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'COMMUNITY CONSENSUS & TOP RATING',
+                    style: TextStyle(
+                      fontFamily: AppTheme.fontMono,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 11,
+                      letterSpacing: 0.8,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppTheme.cyberAmber.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                    child: Text(
+                      'TOP: ${_currentMovie.compositeTopRating.toStringAsFixed(1)}',
+                      style: const TextStyle(
+                        fontFamily: AppTheme.fontMono,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 10,
+                        color: AppTheme.cyberAmber,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              const Divider(color: AppTheme.borderLight, height: 1),
+              const SizedBox(height: 14),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  _buildMetricTile(
+                    label: 'COMPOSITE TOP',
+                    value: '★ ${_currentMovie.compositeTopRating.toStringAsFixed(1)}',
+                    subtext: 'IMDb 60% + User 25% + Recs',
+                    valueColor: AppTheme.cyberAmber,
+                  ),
+                  _buildMetricTile(
+                    label: 'IMDb RATING',
+                    value: '★ ${_currentMovie.rating.toStringAsFixed(1)}',
+                    subtext: '${_currentMovie.votes} votes',
+                    valueColor: AppTheme.ratingStar,
+                  ),
+                  _buildMetricTile(
+                    label: 'USER RATINGS',
+                    value: '★ ${(_currentMovie.userRatingAverage ?? _currentMovie.rating).toStringAsFixed(1)}',
+                    subtext: '${_currentMovie.userRatingsCount} submissions',
+                    valueColor: AppTheme.accentVermilion,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppTheme.background,
+                  border: Border.all(color: AppTheme.borderLight),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.thumb_up_alt, size: 14, color: AppTheme.cyberAmber),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '${_currentMovie.userRecommendationsCount} users recommend this movie to watch',
+                        style: const TextStyle(
+                          fontFamily: AppTheme.fontMono,
+                          fontSize: 10,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                    ),
+                    if (isUserRecommended)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: AppTheme.accentVermilion.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                        child: const Text(
+                          'YOU RECOMMENDED',
+                          style: TextStyle(
+                            fontFamily: AppTheme.fontMono,
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.accentVermilion,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        backgroundColor: isUserRecommended
+                            ? AppTheme.accentVermilion.withValues(alpha: 0.12)
+                            : Colors.transparent,
+                        side: BorderSide(
+                          color: isUserRecommended
+                              ? AppTheme.accentVermilion
+                              : AppTheme.borderLight,
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      onPressed: _toggleUserRecommendation,
+                      icon: Icon(
+                        isUserRecommended ? Icons.thumb_up : Icons.thumb_up_alt_outlined,
+                        size: 15,
+                        color: isUserRecommended ? AppTheme.accentVermilion : AppTheme.textPrimary,
+                      ),
+                      label: Text(
+                        isUserRecommended ? 'RECOMMENDED' : 'RECOMMEND FILM',
+                        style: TextStyle(
+                          fontFamily: AppTheme.fontMono,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: isUserRecommended ? AppTheme.accentVermilion : AppTheme.textPrimary,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: userPersonalRating != null
+                            ? AppTheme.cyberAmber
+                            : AppTheme.accentVermilion,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      onPressed: _showRateFilmDialog,
+                      icon: const Icon(Icons.star, size: 15, color: Colors.black),
+                      label: Text(
+                        userPersonalRating != null
+                            ? 'RATED: ${userPersonalRating.toStringAsFixed(1)} ★'
+                            : 'RATE FILM',
+                        style: const TextStyle(
+                          fontFamily: AppTheme.fontMono,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.black,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildMetricTile({
+    required String label,
+    required String value,
+    required String subtext,
+    required Color valueColor,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontFamily: AppTheme.fontMono,
+            fontSize: 9,
+            color: AppTheme.textSecondary,
+            letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          value,
+          style: TextStyle(
+            fontFamily: AppTheme.fontMono,
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: valueColor,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          subtext,
+          style: const TextStyle(
+            fontFamily: AppTheme.fontMono,
+            fontSize: 8.5,
+            color: AppTheme.textMuted,
+          ),
+        ),
       ],
     );
   }

@@ -16,6 +16,10 @@ class Movie {
   final double recommendedScore;
   final double? calculatedScore;
   final Map<String, dynamic>? scoreBreakdown;
+  final int userRecommendationsCount;
+  final List<String> recommendedByUsers;
+  final double? userRatingAverage;
+  final int userRatingsCount;
 
   const Movie({
     required this.id,
@@ -35,6 +39,10 @@ class Movie {
     this.recommendedScore = 80.0,
     this.calculatedScore,
     this.scoreBreakdown,
+    this.userRecommendationsCount = 42,
+    this.recommendedByUsers = const [],
+    this.userRatingAverage,
+    this.userRatingsCount = 0,
   });
 
   factory Movie.fromJson(Map<String, dynamic> json) {
@@ -61,6 +69,15 @@ class Movie {
           ? double.tryParse(json['calculated_score'].toString())
           : null,
       scoreBreakdown: json['score_breakdown'] as Map<String, dynamic>?,
+      userRecommendationsCount: int.tryParse(json['user_recommendations_count']?.toString() ?? '') ??
+          (((int.tryParse(json['votes']?.toString() ?? '1000') ?? 1000) ~/ 3000) +
+                  ((double.tryParse(json['rating']?.toString() ?? '7.0') ?? 7.0) * 8).toInt())
+              .clamp(12, 999),
+      recommendedByUsers: (json['recommended_by_users'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
+      userRatingAverage: json['user_rating_average'] != null
+          ? double.tryParse(json['user_rating_average'].toString())
+          : null,
+      userRatingsCount: int.tryParse(json['user_ratings_count']?.toString() ?? '0') ?? 0,
     );
   }
 
@@ -83,6 +100,10 @@ class Movie {
       'recommended_score': recommendedScore,
       if (calculatedScore != null) 'calculated_score': calculatedScore,
       if (scoreBreakdown != null) 'score_breakdown': scoreBreakdown,
+      'user_recommendations_count': userRecommendationsCount,
+      'recommended_by_users': recommendedByUsers,
+      if (userRatingAverage != null) 'user_rating_average': userRatingAverage,
+      'user_ratings_count': userRatingsCount,
     };
   }
 
@@ -104,6 +125,10 @@ class Movie {
     double? recommendedScore,
     double? calculatedScore,
     Map<String, dynamic>? scoreBreakdown,
+    int? userRecommendationsCount,
+    List<String>? recommendedByUsers,
+    double? userRatingAverage,
+    int? userRatingsCount,
   }) {
     return Movie(
       id: id ?? this.id,
@@ -123,6 +148,10 @@ class Movie {
       recommendedScore: recommendedScore ?? this.recommendedScore,
       calculatedScore: calculatedScore ?? this.calculatedScore,
       scoreBreakdown: scoreBreakdown ?? this.scoreBreakdown,
+      userRecommendationsCount: userRecommendationsCount ?? this.userRecommendationsCount,
+      recommendedByUsers: recommendedByUsers ?? this.recommendedByUsers,
+      userRatingAverage: userRatingAverage ?? this.userRatingAverage,
+      userRatingsCount: userRatingsCount ?? this.userRatingsCount,
     );
   }
 
@@ -138,6 +167,16 @@ class Movie {
     }
     return score.round().clamp(72, 99);
   }
+
+  double get compositeTopRating {
+    final imdbPart = rating * 0.60;
+    final communityPart = (userRatingAverage ?? rating) * 0.25;
+    final recBonus = (6.0 + (userRecommendationsCount / 50.0).clamp(0.0, 4.0)) * 0.15;
+    final total = imdbPart + communityPart + recBonus;
+    return double.parse(total.clamp(1.0, 10.0).toStringAsFixed(1));
+  }
+
+  bool isRecommendedBy(String userId) => recommendedByUsers.contains(userId);
 
   String get formattedRuntime {
     final hours = runtime ~/ 60;

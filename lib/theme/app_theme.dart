@@ -18,6 +18,7 @@ class AppTheme {
   static const Color textSecondary = Color(0xFF9EA3B0);
   static const Color textMuted = Color(0xFF5E6373);
   static const Color ratingStar = Color(0xFFE8A838);
+  static const Color cyberAmber = Color(0xFFFFB300);
 
   // Borders & Dividers
   static const Color borderLight = Color(0xFF232838);

@@ -100,20 +100,40 @@ class ApiService {
   Future<Map<String, dynamic>> checkHealth() async {
     if (forceOffline) {
       await _ensureLocalLoaded();
-      return {'status': 'offline_mode', 'service': 'CineMatch Local Seed', 'total_movies': _localCatalog.length, 'is_remote': false};
+      return {
+        'status': 'offline_mode',
+        'service': 'CineMatch Local Seed',
+        'total_movies': _localCatalog.length,
+        'is_remote': false,
+        'latency_ms': 0,
+      };
     }
+    final stopwatch = Stopwatch()..start();
     try {
-      final response = await http.get(Uri.parse('$_baseUrl/api/health')).timeout(const Duration(milliseconds: 1200));
+      final response = await http
+          .get(Uri.parse('$_baseUrl/api/health'))
+          .timeout(const Duration(milliseconds: 1200));
+      stopwatch.stop();
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         isUsingOfflineFallback = false;
-        return {...data, 'is_remote': true};
+        return {
+          ...data,
+          'is_remote': true,
+          'latency_ms': stopwatch.elapsedMilliseconds,
+        };
       }
     } catch (_) {}
 
     await _ensureLocalLoaded();
     isUsingOfflineFallback = true;
-    return {'status': 'fallback_offline', 'service': 'CineMatch Offline Engine', 'total_movies': _localCatalog.length, 'is_remote': false};
+    return {
+      'status': 'fallback_offline',
+      'service': 'CineMatch Offline Engine',
+      'total_movies': _localCatalog.length,
+      'is_remote': false,
+      'latency_ms': stopwatch.elapsedMilliseconds,
+    };
   }
 
   // --- Get Catalog Movies ---
@@ -121,6 +141,7 @@ class ApiService {
     String? genre,
     String? search,
     double? minRating,
+    String? sortBy,
     int skip = 0,
     int limit = 50,
   }) async {
@@ -130,6 +151,7 @@ class ApiService {
         if (genre != null && genre.isNotEmpty && genre.toLowerCase() != 'all') queryParams['genre'] = genre;
         if (search != null && search.isNotEmpty) queryParams['search'] = search;
         if (minRating != null) queryParams['min_rating'] = minRating.toString();
+        if (sortBy != null && sortBy.isNotEmpty) queryParams['sort_by'] = sortBy;
 
         final uri = Uri.parse('$_baseUrl/api/movies').replace(queryParameters: queryParams);
         final response = await http.get(uri).timeout(const Duration(milliseconds: 1500));
@@ -163,6 +185,18 @@ class ApiService {
     }
     if (minRating != null) {
       results = results.where((m) => m.rating >= minRating).toList();
+    }
+
+    if (sortBy == 'top_rating') {
+      results.sort((a, b) => b.compositeTopRating.compareTo(a.compositeTopRating));
+    } else if (sortBy == 'recommendations') {
+      results.sort((a, b) => b.userRecommendationsCount.compareTo(a.userRecommendationsCount));
+    } else if (sortBy == 'year') {
+      results.sort((a, b) => b.year.compareTo(a.year));
+    } else if (sortBy == 'title') {
+      results.sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+    } else {
+      results.sort((a, b) => b.rating.compareTo(a.rating));
     }
 
     final end = (skip + limit) > results.length ? results.length : (skip + limit);
@@ -325,8 +359,215 @@ class ApiService {
     await _ensureLocalLoaded();
   }
 
+  // --- Multi-Attribute Similar Movies ---
+  Future<List<Movie>> getSimilarMovies(String movieId, {int limit = 6}) async {
+    if (!forceOffline) {
+      try {
+        final uri = Uri.parse('$_baseUrl/api/movies/$movieId/similar?limit=$limit');
+        final response = await http.get(uri).timeout(const Duration(milliseconds: 1500));
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          final List<dynamic> list = data['similar_movies'] ?? [];
+          return list.map((e) => Movie.fromJson(e)).toList();
+        }
+      } catch (_) {}
+    }
+
+    await _ensureLocalLoaded();
+    Movie? target;
+    for (final m in _localCatalog) {
+      if (m.id == movieId) {
+        target = m;
+        break;
+      }
+    }
+    if (target == null) return [];
+
+    final targetGenres = target.genresList.map((g) => g.toLowerCase()).toSet();
+    final targetDirector = target.director.toLowerCase();
+    final targetMood = target.mood.toLowerCase();
+    final targetYear = target.year;
+    final targetRating = target.rating;
+
+    final scored = <Map<String, dynamic>>[];
+    for (final m in _localCatalog) {
+      if (m.id == movieId) continue;
+
+      final itemGenres = m.genresList.map((g) => g.toLowerCase()).toSet();
+      final intersection = targetGenres.intersection(itemGenres).length;
+      final union = targetGenres.union(itemGenres).length;
+      final jaccard = union > 0 ? (intersection / union) : 0.0;
+
+      final directorMatch = (targetDirector.isNotEmpty && targetDirector != 'unknown' && targetDirector == m.director.toLowerCase()) ? 1.0 : 0.0;
+      final moodMatch = (targetMood == m.mood.toLowerCase()) ? 1.0 : 0.0;
+      final eraSim = (1.0 - ((targetYear - m.year).abs() / 40.0)).clamp(0.0, 1.0);
+      final ratingSim = (1.0 - ((targetRating - m.rating).abs() / 5.0)).clamp(0.0, 1.0);
+
+      final similarityScore = (jaccard * 45.0) + (directorMatch * 20.0) + (moodMatch * 15.0) + (eraSim * 10.0) + (ratingSim * 10.0);
+      scored.add({'movie': m, 'score': similarityScore});
+    }
+
+    scored.sort((a, b) => (b['score'] as double).compareTo(a['score'] as double));
+    return scored.take(limit).map((e) => e['movie'] as Movie).toList();
+  }
+
+  // --- Catalog Analytics & Stats ---
+  Future<Map<String, dynamic>> getCatalogStats() async {
+    if (!forceOffline) {
+      try {
+        final response = await http.get(Uri.parse('$_baseUrl/api/stats')).timeout(const Duration(milliseconds: 1500));
+        if (response.statusCode == 200) {
+          return json.decode(response.body);
+        }
+      } catch (_) {}
+    }
+
+    await _ensureLocalLoaded();
+    final total = _localCatalog.length;
+    if (total == 0) return {'total_movies': 0, 'avg_rating': 0.0, 'genres': {}, 'moods': {}};
+
+    final sumRating = _localCatalog.fold<double>(0.0, (acc, m) => acc + m.rating);
+    final avgRating = double.parse((sumRating / total).toStringAsFixed(2));
+
+    final genreMap = <String, int>{};
+    final moodMap = <String, int>{};
+    final decadeMap = <String, int>{};
+
+    for (final m in _localCatalog) {
+      for (final g in m.genresList) {
+        genreMap[g] = (genreMap[g] ?? 0) + 1;
+      }
+      moodMap[m.mood] = (moodMap[m.mood] ?? 0) + 1;
+      final decade = '${(m.year ~/ 10) * 10}s';
+      decadeMap[decade] = (decadeMap[decade] ?? 0) + 1;
+    }
+
+    final sortedGenres = Map.fromEntries(
+      genreMap.entries.toList()..sort((a, b) => b.value.compareTo(a.value)),
+    );
+
+    return {
+      'total_movies': total,
+      'avg_rating': avgRating,
+      'genres': sortedGenres,
+      'moods': moodMap,
+      'decades': decadeMap,
+    };
+  }
+
+  // --- Available Genres ---
+  Future<List<String>> getAvailableGenres() async {
+    await _ensureLocalLoaded();
+    final set = <String>{'All'};
+    for (final m in _localCatalog) {
+      set.addAll(m.genresList);
+    }
+    final list = set.toList();
+    list.sort();
+    return list;
+  }
+
+  // --- Toggle Community Recommendation ---
+  Future<Map<String, dynamic>> toggleRecommendation(String movieId, String userId) async {
+    if (!forceOffline) {
+      try {
+        final response = await http
+            .post(
+              Uri.parse('$_baseUrl/api/movies/$movieId/recommend'),
+              headers: {'Content-Type': 'application/json'},
+              body: json.encode({'user_id': userId}),
+            )
+            .timeout(const Duration(milliseconds: 1500));
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          if (data['movie'] != null) {
+            final updatedMovie = Movie.fromJson(data['movie']);
+            _updateLocalItem(updatedMovie);
+          }
+          return data;
+        }
+      } catch (_) {}
+    }
+
+    await _ensureLocalLoaded();
+    final idx = _localCatalog.indexWhere((m) => m.id == movieId);
+    if (idx != -1) {
+      final m = _localCatalog[idx];
+      final users = List<String>.from(m.recommendedByUsers);
+      final isNowRecommended = !users.contains(userId);
+      if (isNowRecommended) {
+        users.add(userId);
+      } else {
+        users.remove(userId);
+      }
+      final newCount = isNowRecommended
+          ? m.userRecommendationsCount + 1
+          : (m.userRecommendationsCount > 0 ? m.userRecommendationsCount - 1 : 0);
+      final updated = m.copyWith(
+        recommendedByUsers: users,
+        userRecommendationsCount: newCount,
+      );
+      _localCatalog[idx] = updated;
+      return {
+        'message': 'Recommendation updated locally',
+        'movie_id': movieId,
+        'is_recommended': isNowRecommended,
+        'user_recommendations_count': newCount,
+        'movie': updated.toJson(),
+      };
+    }
+    return {'is_recommended': false, 'user_recommendations_count': 0};
+  }
+
+  // --- Submit User Rating ---
+  Future<Map<String, dynamic>> submitUserRating(String movieId, String userId, double rating) async {
+    if (!forceOffline) {
+      try {
+        final response = await http
+            .post(
+              Uri.parse('$_baseUrl/api/movies/$movieId/rate'),
+              headers: {'Content-Type': 'application/json'},
+              body: json.encode({'movie_id': movieId, 'user_id': userId, 'rating': rating}),
+            )
+            .timeout(const Duration(milliseconds: 1500));
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          if (data['movie'] != null) {
+            final updatedMovie = Movie.fromJson(data['movie']);
+            _updateLocalItem(updatedMovie);
+          }
+          return data;
+        }
+      } catch (_) {}
+    }
+
+    await _ensureLocalLoaded();
+    final idx = _localCatalog.indexWhere((m) => m.id == movieId);
+    if (idx != -1) {
+      final m = _localCatalog[idx];
+      final currentAvg = m.userRatingAverage ?? m.rating;
+      final currentCount = m.userRatingsCount;
+      final newCount = currentCount + 1;
+      final newAvg = double.parse((((currentAvg * currentCount) + rating) / newCount).toStringAsFixed(1));
+      final updated = m.copyWith(
+        userRatingAverage: newAvg,
+        userRatingsCount: newCount,
+      );
+      _localCatalog[idx] = updated;
+      return {
+        'message': 'Rating submitted locally',
+        'movie_id': movieId,
+        'user_rating_average': newAvg,
+        'user_ratings_count': newCount,
+        'movie': updated.toJson(),
+      };
+    }
+    return {'user_rating_average': rating, 'user_ratings_count': 1};
+  }
+
   void _updateLocalItem(Movie movie) {
     final idx = _localCatalog.indexWhere((m) => m.id == movie.id);
     if (idx != -1) _localCatalog[idx] = movie;
   }
 }
+
