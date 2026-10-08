@@ -16,12 +16,17 @@ class RecommendationChips extends StatelessWidget {
   });
 
   static const List<Map<String, String>> registers = [
-    {'internal': 'Adrenaline', 'display': 'Action & Energy'},
-    {'internal': 'Thrilled', 'display': 'Suspense & Thrill'},
-    {'internal': 'Mind-bent', 'display': 'Mind-Bending'},
-    {'internal': 'Chilled', 'display': 'Chill & Relaxed'},
-    {'internal': 'Romantic', 'display': 'Romantic'},
-    {'internal': 'Inspired', 'display': 'Inspiring'},
+    {'internal': 'Adrenaline', 'display': '🔥 Adrenaline'},
+    {'internal': 'Mind-Bending', 'display': '🧠 Mind-Bending'},
+    {'internal': 'Suspense', 'display': '😱 Suspense'},
+    {'internal': 'Romantic', 'display': '❤️ Romantic'},
+    {'internal': 'Feel-Good', 'display': '😂 Feel-Good'},
+    {'internal': 'Emotional', 'display': '😢 Emotional'},
+    {'internal': 'Scary', 'display': '👻 Scary'},
+    {'internal': 'Sci-Fi', 'display': '🚀 Sci-Fi'},
+    {'internal': 'Mystery', 'display': '🕵️ Mystery'},
+    {'internal': 'Chill', 'display': '🌙 Chill'},
+    {'internal': 'Thought-Provoking', 'display': '🎭 Thought-Provoking'},
   ];
 
   static const List<String> genres = [

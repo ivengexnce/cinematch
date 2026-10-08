@@ -114,6 +114,14 @@ class RatePayload(BaseModel):
     user_id: str = Field(..., min_length=1)
     rating: float = Field(..., ge=0.0, le=10.0)
 
+class ReviewPayload(BaseModel):
+    user_id: str = Field(..., min_length=1)
+    author: str = Field(default="Anonymous Cinephile")
+    rating: float = Field(..., ge=1.0, le=10.0)
+    comment: str = Field(..., min_length=3)
+    is_recommended: bool = True
+    photo_url: Optional[str] = None
+
 @app.get("/api/health", summary="Health Check")
 def health_check():
     return {
@@ -238,6 +246,94 @@ def get_movie_by_id(movie_id: str):
             return m
     raise HTTPException(status_code=404, detail=f"Movie with id '{movie_id}' not found")
 
+@app.post("/api/movies/{movie_id}/review", summary="Submit Community Review for Movie")
+def submit_movie_review(movie_id: str, payload: ReviewPayload):
+    for m in catalog:
+        if m.get("id") == movie_id:
+            reviews_list = m.setdefault("reviews", [])
+            new_review = {
+                "id": f"rev_{uuid.uuid4().hex[:8]}",
+                "user_id": payload.user_id,
+                "author": payload.author,
+                "rating": payload.rating,
+                "comment": payload.comment,
+                "is_recommended": payload.is_recommended,
+                "helpful_count": 0,
+                "photo_url": payload.photo_url,
+                "created_at": "JUST NOW"
+            }
+            reviews_list.insert(0, new_review)
+            m["reviews_count"] = len(reviews_list)
+
+            # Also update movie community rating
+            current_avg = float(m.get("user_rating_average", m.get("rating", 7.0)))
+            current_count = int(m.get("user_ratings_count", 0))
+            new_count = current_count + 1
+            new_avg = round(((current_avg * current_count) + payload.rating) / new_count, 1)
+            m["user_rating_average"] = new_avg
+            m["user_ratings_count"] = new_count
+
+            if payload.is_recommended:
+                users_list = m.setdefault("recommended_by_users", [])
+                if payload.user_id not in users_list:
+                    users_list.append(payload.user_id)
+                    m["user_recommendations_count"] = int(m.get("user_recommendations_count", 0)) + 1
+
+            save_catalog()
+            return {
+                "message": "Review submitted successfully",
+                "review": new_review,
+                "movie": m
+            }
+
+    raise HTTPException(status_code=404, detail=f"Movie with id '{movie_id}' not found")
+
+@app.get("/api/movies/{movie_id}/reviews", summary="Get Community Reviews for Movie")
+def get_movie_reviews(movie_id: str):
+    for m in catalog:
+        if m.get("id") == movie_id:
+            return {"reviews": m.get("reviews", []), "total": len(m.get("reviews", []))}
+    raise HTTPException(status_code=404, detail=f"Movie with id '{movie_id}' not found")
+
+@app.get("/api/trending", summary="Trending Movies Algorithm")
+def get_trending_movies(limit: int = Query(12, ge=1, le=50)):
+    scored = []
+    for m in catalog:
+        recs = int(m.get("user_recommendations_count", 20))
+        ratings_cnt = int(m.get("user_ratings_count", 5))
+        imdb_rating = float(m.get("rating", 7.0))
+        year = int(m.get("year", 2018))
+        recency_bonus = 15.0 if year >= 2015 else 5.0
+        
+        trending_score = round((recs * 2.5) + (ratings_cnt * 2.0) + (imdb_rating * 6.0) + recency_bonus, 1)
+        item = dict(m)
+        item["trending_score"] = trending_score
+        scored.append(item)
+
+    scored.sort(key=lambda x: x["trending_score"], reverse=True)
+    return {"trending": scored[:limit], "count": min(limit, len(scored))}
+
+@app.get("/api/top-rated", summary="Bayesian Top Rated Consensus")
+def get_top_rated(
+    category: str = Query("all", description="all, cinematch, imdb, most_recommended"),
+    limit: int = Query(12, ge=1, le=50)
+):
+    results = list(catalog)
+    if category == "imdb":
+        results.sort(key=lambda x: float(x.get("rating", 0.0)), reverse=True)
+    elif category == "most_recommended":
+        results.sort(key=lambda x: int(x.get("user_recommendations_count", 0)), reverse=True)
+    else: # Bayesian CineMatch Consensus
+        C = 7.8 # Prior mean
+        m_thresh = 10 # Minimum threshold
+        def bayesian_score(x):
+            v = int(x.get("user_ratings_count", 8))
+            R = float(x.get("user_rating_average", x.get("rating", 7.5)))
+            return (v / (v + m_thresh)) * R + (m_thresh / (v + m_thresh)) * C
+        results.sort(key=bayesian_score, reverse=True)
+
+    return {"top_rated": results[:limit], "count": min(limit, len(results))}
+
 @app.get("/api/recommendations", summary="AI Content-Based Recommendation Engine")
 def get_recommendations(
     mood: Optional[str] = Query(None, description="Current mood: Adrenaline, Thrilled, Mind-bent, Chilled, Romantic, Inspired"),
@@ -351,8 +447,15 @@ def get_genres():
 
 @app.get("/api/moods", summary="List All Available Moods")
 def get_moods():
-    """Returns all available mood classifications."""
-    moods_set = {m.get("mood", "Curious") for m in catalog if m.get("mood")}
+    """Returns all available mood classifications including the 11 core emotional categories."""
+    spec_moods = [
+        "Adrenaline", "Mind-Bending", "Suspense", "Romantic", "Feel-Good",
+        "Emotional", "Scary", "Sci-Fi", "Mystery", "Chill", "Thought-Provoking"
+    ]
+    moods_set = set(spec_moods)
+    for m in catalog:
+        if m.get("mood"):
+            moods_set.add(m.get("mood"))
     return {"moods": sorted(list(moods_set))}
 
 @app.get("/api/movies/{movie_id}/similar", summary="Multi-Attribute Similar Movie Recommendations")

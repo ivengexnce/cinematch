@@ -198,11 +198,17 @@ Interactive Swagger documentation is available at **`http://127.0.0.1:8000/docs`
 | `GET` | `/api/health` | — | Service health status, version, and movie count. |
 | `GET` | `/api/stats` | — | Catalog analytics, mean rating, top genres, and decade histogram. |
 | `GET` | `/api/genres` | — | List all unique genre tags available in the database. |
-| `GET` | `/api/moods` | — | List all available mood classifications. |
+| `GET` | `/api/moods` | — | List all 11 mood classifications (Adrenaline, Mind-Bending, Suspense, etc.). |
 | `GET` | `/api/movies` | `genre`, `search`, `min_rating`, `skip`, `limit` | Paginated catalog query with filtering and search. |
+| `GET` | `/api/trending` | `limit` | Live multi-signal trending titles based on views, recs, and ratings. |
+| `GET` | `/api/top-rated` | `filter`, `limit` | Leaderboard filtered by `all`, `cinematch`, `imdb`, or `most_recommended`. |
 | `GET` | `/api/movies/{id}` | — | Fetch single movie details by unique ID. |
 | `GET` | `/api/movies/{id}/similar` | `limit` | Ranked list of similar movies based on multi-attribute affinity. |
 | `GET` | `/api/recommendations` | `mood`, `genre`, `limit` | Top recommended movies ranked by affinity score. |
+| `POST` | `/api/movies/{id}/recommend` | `{"user_id": str}` | Toggle user recommendation with anti-duplicate enforcement. |
+| `POST` | `/api/movies/{id}/rate` | `{"movie_id": str, "user_id": str, "rating": float}` | Submit personal user rating and recalculate averages. |
+| `GET` | `/api/movies/{id}/reviews` | — | Fetch community reviews for a movie. |
+| `POST` | `/api/movies/{id}/review` | *JSON ReviewPayload* | Submit written review with rating and optional review photo URL. |
 | `POST` | `/api/movies` | *JSON Body* | Add a new movie record (`201 Created`). |
 | `PUT` | `/api/movies/{id}` | *JSON Body (`rating`, `synopsis`)* | Update movie details (`200 OK`). |
 | `DELETE` | `/api/movies/{id}` | — | Delete movie from database (`200 OK`). |

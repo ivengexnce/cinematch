@@ -565,6 +565,166 @@ class ApiService {
     return {'user_rating_average': rating, 'user_ratings_count': 1};
   }
 
+  // --- Trending Movies ---
+  Future<List<Movie>> getTrendingMovies({int limit = 10}) async {
+    if (!forceOffline) {
+      try {
+        final uri = Uri.parse('$_baseUrl/api/trending?limit=$limit');
+        final response = await http.get(uri).timeout(const Duration(milliseconds: 1500));
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          final List<dynamic> list = data['trending'] ?? [];
+          return list.map((e) => Movie.fromJson(e)).toList();
+        }
+      } catch (_) {}
+    }
+
+    await _ensureLocalLoaded();
+    final list = List<Movie>.from(_localCatalog);
+    list.sort((a, b) {
+      final scoreA = (a.rating * 0.4) + (a.userRecommendationsCount * 1.5) + ((a.userRatingAverage ?? a.rating) * 0.3);
+      final scoreB = (b.rating * 0.4) + (b.userRecommendationsCount * 1.5) + ((b.userRatingAverage ?? b.rating) * 0.3);
+      return scoreB.compareTo(scoreA);
+    });
+    return list.take(limit).toList();
+  }
+
+  // --- Top Rated & Most Recommended Leaderboard ---
+  Future<List<Movie>> getTopRatedMovies({String filter = 'all', int limit = 10}) async {
+    if (!forceOffline) {
+      try {
+        final uri = Uri.parse('$_baseUrl/api/top-rated?filter=$filter&limit=$limit');
+        final response = await http.get(uri).timeout(const Duration(milliseconds: 1500));
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          final List<dynamic> list = data['top_rated'] ?? [];
+          return list.map((e) => Movie.fromJson(e)).toList();
+        }
+      } catch (_) {}
+    }
+
+    await _ensureLocalLoaded();
+    final list = List<Movie>.from(_localCatalog);
+    if (filter == 'imdb') {
+      list.sort((a, b) => b.rating.compareTo(a.rating));
+    } else if (filter == 'cinematch') {
+      list.sort((a, b) => b.cineMatchScore.compareTo(a.cineMatchScore));
+    } else if (filter == 'most_recommended') {
+      list.sort((a, b) => b.userRecommendationsCount.compareTo(a.userRecommendationsCount));
+    } else {
+      list.sort((a, b) => b.compositeTopRating.compareTo(a.compositeTopRating));
+    }
+    return list.take(limit).toList();
+  }
+
+  // --- Reviews API ---
+  Future<List<UserReview>> getMovieReviews(String movieId) async {
+    if (!forceOffline) {
+      try {
+        final uri = Uri.parse('$_baseUrl/api/movies/$movieId/reviews');
+        final response = await http.get(uri).timeout(const Duration(milliseconds: 1500));
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          final List<dynamic> list = data['reviews'] ?? [];
+          return list.map((e) => UserReview.fromJson(e)).toList();
+        }
+      } catch (_) {}
+    }
+
+    await _ensureLocalLoaded();
+    final m = _localCatalog.cast<Movie?>().firstWhere((e) => e?.id == movieId, orElse: () => null);
+    return m?.reviews ?? [];
+  }
+
+  Future<Map<String, dynamic>> submitReview(String movieId, UserReview review) async {
+    if (!forceOffline) {
+      try {
+        final uri = Uri.parse('$_baseUrl/api/movies/$movieId/review');
+        final response = await http
+            .post(
+              uri,
+              headers: {'Content-Type': 'application/json'},
+              body: json.encode({
+                'user_id': review.userId,
+                'author': review.author,
+                'avatar_url': review.avatarUrl,
+                'rating': review.rating,
+                'comment': review.comment,
+                'is_recommended': review.isRecommended,
+                'photo_url': review.photoUrl,
+              }),
+            )
+            .timeout(const Duration(milliseconds: 2000));
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          if (data['movie'] != null) {
+            _updateLocalItem(Movie.fromJson(data['movie']));
+          }
+          return data;
+        }
+      } catch (_) {}
+    }
+
+    await _ensureLocalLoaded();
+    final idx = _localCatalog.indexWhere((m) => m.id == movieId);
+    if (idx != -1) {
+      final current = _localCatalog[idx];
+      final currentReviews = List<UserReview>.from(current.reviews);
+      currentReviews.insert(0, review);
+      final updated = current.copyWith(
+        reviews: currentReviews,
+        reviewsCount: currentReviews.length,
+      );
+      _localCatalog[idx] = updated;
+      return {'message': 'Review saved locally', 'movie': updated.toJson()};
+    }
+    return {'message': 'Movie not found'};
+  }
+
+  // --- Transparent CineMatch Score Calculation ---
+  Map<String, dynamic> calculateScoreBreakdown(
+    Movie movie, {
+    List<String> userFavoriteGenres = const [],
+    List<String> userFavoriteMoods = const [],
+    List<String> watchHistory = const [],
+  }) {
+    // 1. Genre Match (up to +25)
+    var genreScore = 10.0;
+    for (final g in movie.genresList) {
+      if (userFavoriteGenres.any((fg) => fg.toLowerCase() == g.toLowerCase())) {
+        genreScore += 7.5;
+      }
+    }
+    genreScore = genreScore.clamp(10.0, 25.0);
+
+    // 2. IMDb Rating (up to +20)
+    // 10.0 rating -> 20 pts, 7.0 -> 14 pts
+    final imdbScore = ((movie.rating / 10.0) * 20.0).clamp(10.0, 20.0);
+
+    // 3. Community Rating & Recommendation (up to +20)
+    final commScore = ((movie.recommendationRate) * 12.0 + ((movie.cineMatchScore / 10.0) * 8.0)).clamp(8.0, 20.0);
+
+    // 4. User History / Taste Affinity (up to +18)
+    final historyScore = (watchHistory.contains(movie.id) ? 14.0 : 16.0);
+
+    // 5. Mood Match (up to +17)
+    var moodScore = 8.0;
+    if (userFavoriteMoods.any((m) => m.toLowerCase() == movie.mood.toLowerCase())) {
+      moodScore = 17.0;
+    }
+
+    final totalPercent = (genreScore + imdbScore + commScore + historyScore + moodScore).round().clamp(60, 99);
+
+    return {
+      'genre_match': genreScore.round(),
+      'imdb_rating': imdbScore.round(),
+      'community_rating': commScore.round(),
+      'user_history': historyScore.round(),
+      'mood_match': moodScore.round(),
+      'final_match': totalPercent,
+    };
+  }
+
   void _updateLocalItem(Movie movie) {
     final idx = _localCatalog.indexWhere((m) => m.id == movie.id);
     if (idx != -1) _localCatalog[idx] = movie;

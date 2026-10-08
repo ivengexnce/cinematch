@@ -270,3 +270,44 @@ flowchart TD
     StaticHost --> VivaDemo
     LocalPy --> VivaDemo
 ```
+
+---
+
+## 8. Community Recommendation, User Rating & Consensus Flow
+
+```mermaid
+flowchart TD
+    UserApp([User in CineMatch App]) --> ViewMovie["Views Movie Details in MovieDetailScreen"]
+    
+    %% Recommendation Branch
+    ViewMovie --> RecAction["User Clicks '👍 RECOMMEND FILM'"]
+    RecAction --> AuthCheck["AuthService Checks User Status"]
+    AuthCheck --> LocalToggle["Toggle Local Set in AuthService<br/>Update 0ms Immediate Counter in UI"]
+    LocalToggle --> ApiRec["ApiService.toggleRecommendation(movieId, userId)"]
+    
+    ApiRec --> RemoteRec{"FastAPI Online?"}
+    RemoteRec -->|Yes| PostRec["POST /api/movies/{id}/recommend<br/>body: {'user_id': userId}"]
+    PostRec --> RecPersist["Save Mutated Catalog to active_catalog.json"]
+    RemoteRec -->|Offline| LocalSeedRec["Update in-memory catalog record"]
+    
+    %% Rating Branch
+    ViewMovie --> RateAction["User Clicks '★ RATE FILM'"]
+    RateAction --> RateModal["Opens 1.0 - 10.0 Rating Slider Dialog"]
+    RateModal --> SubmitScore["User Selects Score & Submits"]
+    SubmitScore --> LocalRate["AuthService.setUserRating(movieId, score)<br/>Update Local State"]
+    LocalRate --> ApiRate["ApiService.submitUserRating(movieId, userId, score)"]
+    
+    ApiRate --> RemoteRate{"FastAPI Online?"}
+    RemoteRate -->|Yes| PostRate["POST /api/movies/{id}/rate<br/>body: {'user_id': userId, 'rating': score}"]
+    PostRate --> RatePersist["Recompute Community Average<br/>Save to active_catalog.json"]
+    RemoteRate -->|Offline| LocalSeedRate["Recompute average in-memory"]
+    
+    %% Consensus Top Rating
+    RecPersist --> RecalcTop["Recalculate Composite Top Rating:<br/>0.60 * IMDb + 0.25 * UserAvg + 0.15 * RecsBonus"]
+    RatePersist --> RecalcTop
+    LocalSeedRec --> RecalcTop
+    LocalSeedRate --> RecalcTop
+    
+    RecalcTop --> FeedSort["Displayed in '★ TOP RATED' & '🔥 MOST RECOMMENDED' Catalog Sorts"]
+    FeedSort --> Done([Real-Time Community Ranking Updated])
+```

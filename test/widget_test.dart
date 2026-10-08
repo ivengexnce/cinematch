@@ -16,9 +16,10 @@ void main() {
   group('CineMatch Core Tests', () {
     testWidgets('CineMatch app smoke test and UI mount', (WidgetTester tester) async {
       await tester.pumpWidget(const CineMatchApp());
-      expect(find.text('CINEMATCH'), findsOneWidget);
-      expect(find.text('RECOMMENDED'), findsOneWidget);
-      expect(find.text('ALL MOVIES'), findsOneWidget);
+      expect(find.text('CINEMATCH'), findsWidgets);
+      expect(find.text('Home'), findsWidgets);
+      expect(find.text('Explore'), findsWidgets);
+      expect(find.text('For You'), findsWidgets);
     });
 
     test('Movie model serialization and formatting', () {
