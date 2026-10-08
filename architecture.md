@@ -120,8 +120,9 @@ lib/
 - **`SettingsScreen`**: Environment and diagnostic dashboard providing server URL presets, real-time round-trip latency stopwatch measurement, catalog analytics histogram, and database reset triggers.
 
 ### 3.2 Service Layer & Data Resilience
-- **`ApiService`**: Singleton HTTP client with proactive health-checking. Implements an automatic failover mechanism that intercepts network timeouts or 5xx errors and redirects queries to the internal Dart seed engine without throwing UI-crashing exceptions.
-- **`WatchlistService`**: Extends `ChangeNotifier` to offer immediate reactive state synchronization across all views (e.g., adding a movie updates badges across the Home tabs simultaneously).
+- **`ApiService`**: Singleton HTTP client with proactive health-checking. Implements an automatic failover mechanism that intercepts network timeouts or 5xx errors and redirects queries to the internal Dart seed engine without throwing UI-crashing exceptions. Supports toggle recommendation and user rating submissions.
+- **`AuthService`**: Manages persistent user session, community credentials (`@handle`, display name, email), user recommendations set, and individual movie rating scores with `shared_preferences` persistence.
+- **`WatchlistService`**: Extends `ChangeNotifier` to offer immediate reactive state synchronization across all views with `shared_preferences` persistence.
 - **`FirebaseStorageService`**: Wraps `firebase_storage` SDK, managing file reading, MIME metadata configuration, and event stream listening.
 
 ---
@@ -132,7 +133,7 @@ lib/
 - **Framework**: FastAPI 0.110+ on Uvicorn ASGI Web Server.
 - **Language**: Python 3.10+.
 - **Validation**: Pydantic V2 data contracts.
-- **Data Persistence**: In-memory optimized indexed dictionary with JSON seed backing (`data/full_movies.json`).
+- **Data Persistence**: In-memory optimized indexed dictionary with JSON seed backing (`data/full_movies.json`) and atomic safe write-out to `active_catalog.json`.
 
 ### 4.2 REST API Specification & Data Contracts
 
@@ -142,8 +143,10 @@ lib/
 | `GET` | `/api/stats` | — | `200 OK` | Comprehensive analytics: mean rating, top genres, decade breakdown. |
 | `GET` | `/api/genres` | — | `200 OK` | Distinct list of all available genres in the dataset. |
 | `GET` | `/api/moods` | — | `200 OK` | Distinct list of mood categories in the dataset. |
-| `GET` | `/api/movies` | `genre`, `search`, `min_rating`, `skip`, `limit` | `200 OK` | Paginated catalog search and multi-parameter filtering. |
+| `GET` | `/api/movies` | `genre`, `search`, `min_rating`, `sort_by`, `skip`, `limit` | `200 OK` | Paginated catalog search and multi-parameter filtering (supports `top_rating` & `recommendations`). |
 | `GET` | `/api/movies/{id}` | — | `200 OK` / `404` | Retrieve detailed metadata for a single film. |
+| `POST` | `/api/movies/{id}/recommend` | `{"user_id": str}` | `200 OK` / `404` | Toggle user recommendation, incrementing/decrementing community count. |
+| `POST` | `/api/movies/{id}/rate` | `{"user_id": str, "rating": float}` | `200 OK` / `404` | Submit community user score and recalculate community average. |
 | `GET` | `/api/movies/{id}/similar` | `limit` | `200 OK` / `404` | Multi-attribute similarity ranking for the specified movie. |
 | `GET` | `/api/recommendations` | `mood`, `genre`, `limit` | `200 OK` | Weighted affinity recommendation ranking. |
 | `POST` | `/api/movies` | `MovieCreate` (JSON) | `201 Created` / `422` | Create new movie with cloud poster URL. |

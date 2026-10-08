@@ -43,6 +43,12 @@
 - **Multi-Attribute Similar Movies Engine**: Computes composite similarity using Jaccard genre overlap ($45\%$), director match ($20\%$), mood alignment ($15\%$), release era proximity ($10\%$), and rating proximity ($10\%$).
 - **Transparent Score Breakdown**: Renders a radar score breakdown showing base score, mood bonus, genre bonus, and rating boost.
 
+### 👥 Community Recommendations & Top-Rating Consensus
+- **User Recommendation Engine**: Tracks real-time community recommendation counts (`userRecommendationsCount` & `recommendedByUsers`). Users can toggle recommendations on any title with live feedback.
+- **Composite Top Rating Algorithm**: Synthesizes verified IMDb ratings ($60\%$), active community user ratings ($25\%$), and recommendation volume bonuses ($15\%$) into a single gold standard rating ($1.0 - 10.0$).
+- **User Profile & Login State**: Persistent `AuthService` maintaining user identity (`@handle`, name, bio, email), personal ratings history, and recommended film badges synced across app sessions.
+- **Top Community Sorting**: Direct filter in Catalog tab (`★ Top Rated (Community + IMDb)` and `🔥 Most Recommended`).
+
 ### ☁️ Cloud Media Ingestion with Firebase Storage
 - **Direct Streaming Upload**: Camera and gallery integration via `image_picker` streaming bytes directly to Firebase Cloud Storage (`gs://cinematch-app.appspot.com/movie_posters/`).
 - **Live Visual Progress**: Animated linear progress bar tracking real-time byte transfer percentages.
@@ -51,7 +57,7 @@
 ### 🔍 Advanced Exploration & Catalog Tools
 - **Interactive Genre Filter Carousel**: One-tap genre switching (`All`, `Action`, `Sci-Fi`, `Drama`, `Comedy`, `Thriller`, etc.).
 - **Debounced Instant Search**: Sub-millisecond search across title, director, cast, and storyline.
-- **Multi-Parameter Sorting**: Sort by rating, release year, or alphabetical title with minimum rating slider filtering.
+- **Multi-Parameter Sorting**: Sort by Top Rated (Community + IMDb), Most Recommended, IMDb rating, release year, or title.
 - **Persistent Watchlist Vault**: Device-stored bookmark manager with `shared_preferences` persistence across app restarts, one-tap bookmark toggles, and a batch clear-all confirmation guard.
 - **Surprise Pick Generator**: Instant random curated movie suggestion modal.
 - **Clipboard Summary Sharing**: One-tap copy of movie metadata and synopsis with toast confirmation.
