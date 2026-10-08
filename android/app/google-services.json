@@ -12,7 +12,20 @@
           "package_name": "cine.match"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "551627410847-d5fu2kksrnho03cdvgegc8q2sjlqll5l.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "cine.match",
+            "certificate_hash": "2d2ca3075fdc07b4595718e3fcd57d2f99443aea"
+          }
+        },
+        {
+          "client_id": "551627410847-q5ugeeplug53ll5q645f7rdehe6k2nu5.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyBMiH9IJ-9u0GS-AS0PBQnYXq0G04MWdtg"
@@ -20,26 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:551627410847:android:b84630a9c6aa588cec41aa",
-        "android_client_info": {
-          "package_name": "com.atblink.atblink"
-        }
-      },
-      "oauth_client": [],
-      "api_key": [
-        {
-          "current_key": "AIzaSyBMiH9IJ-9u0GS-AS0PBQnYXq0G04MWdtg"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "551627410847-q5ugeeplug53ll5q645f7rdehe6k2nu5.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
