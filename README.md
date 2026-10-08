@@ -126,6 +126,9 @@ movie_recommed_sys/
 │   │   └── recommendation_chips.dart # Mood and genre selection carousel
 │   ├── firebase_options.dart         # Firebase multiplatform configuration
 │   └── main.dart                     # App entry point with instant background boot
+├── android/
+│   └── app/src/main/kotlin/cine/match/
+│       └── MainActivity.kt           # Android Kotlin entry activity (cine.match)
 ├── test/
 │   └── widget_test.dart              # Automated unit and widget test suite
 ├── web/
@@ -198,7 +201,7 @@ The FastAPI backend runs on `http://127.0.0.1:8000` and provides interactive Swa
    ```bash
    flutter run -d android
    ```
-   > **Note for Android Emulator**: The app automatically provides a quick-switch preset to `http://10.0.2.2:8000` in **Settings** to connect to localhost on host machine.
+   > **Note for Android Device / Emulator**: The app automatically connects to `cine.match.MainActivity`. In **Settings**, you can set the backend server URL to `http://10.0.2.2:8000` (emulator) or your host IP (physical device).
 
 ---
 
@@ -227,7 +230,7 @@ Run the automated analyzer to verify zero static analysis errors:
 ```bash
 flutter analyze
 ```
-*Output: `No issues found! (ran in 1.7s)`*
+*Output: `No issues found!`*
 
 Execute the automated test suite:
 ```bash
@@ -245,7 +248,7 @@ flutter test
 
 ## 📦 Build & Deployment (Release APK)
 
-To compile the release APK for examination, demonstration, or production installation:
+To compile the APK for examination, demonstration, or production installation:
 
 ```bash
 flutter build apk --release
@@ -269,5 +272,3 @@ flutter build web --release
 - **Assignment**: Practical 12 — Develop and Deploy a Complete Flutter Application with a Backend API and Cloud Storage.
 - **Dataset**: Kaggle IMDB 1,000 Movies Dataset (`yusufdelikkaya/imdb-movie-dataset`).
 - **License**: MIT Open Source License.
-#   c i n e m a t c h  
- 
