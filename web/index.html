@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="CineMatch — Intelligent Movie Recommendation System.">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="CineMatch">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <!-- Typography with display swap for fast font loading -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400..700;1,6..72,400..700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+
+  <title>CineMatch — Movie Recommendation System</title>
+  <link rel="manifest" href="manifest.json">
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      background-color: #0C0E14;
+      color: #F4F2EC;
+      margin: 0;
+      padding: 0;
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      overflow: hidden;
+    }
+
+    #loading-splash {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #0C0E14;
+      z-index: 99999;
+      transition: opacity 0.4s ease-out;
+    }
+
+    .badge-icon {
+      width: 52px;
+      height: 52px;
+      border: 1.5px solid #E23D28;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 20px;
+      position: relative;
+    }
+
+    .badge-icon::after {
+      content: '';
+      position: absolute;
+      width: 6px;
+      height: 6px;
+      background-color: #E23D28;
+      top: -3px;
+      right: -3px;
+    }
+
+    .brand-title {
+      font-family: 'Space Mono', monospace;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: #F4F2EC;
+      margin-bottom: 6px;
+    }
+
+    .brand-subtitle {
+      font-family: 'Space Mono', monospace;
+      font-size: 11px;
+      color: #7E8698;
+      letter-spacing: 1px;
+      margin-bottom: 28px;
+    }
+
+    .progress-bar-container {
+      width: 180px;
+      height: 2px;
+      background: #1C2230;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .progress-bar-value {
+      width: 40%;
+      height: 100%;
+      background: #E23D28;
+      position: absolute;
+      animation: indeterminate 1.4s infinite ease-in-out;
+    }
+
+    @keyframes indeterminate {
+      0% {
+        left: -40%;
+        width: 30%;
+      }
+      50% {
+        left: 30%;
+        width: 60%;
+      }
+      100% {
+        left: 100%;
+        width: 30%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="loading-splash">
+    <div class="badge-icon">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#E23D28" stroke-width="2" stroke-linecap="square">
+        <polygon points="5 3 19 12 5 21 5 3"></polygon>
+      </svg>
+    </div>
+    <div class="brand-title">CINEMATCH</div>
+    <div class="brand-subtitle">MOVIE RECOMMENDATIONS</div>
+    <div class="progress-bar-container">
+      <div class="progress-bar-value"></div>
+    </div>
+  </div>
+
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

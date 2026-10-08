@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "403444605586",
+    "project_id": "movie-recommendation-sys-c374e",
+    "storage_bucket": "movie-recommendation-sys-c374e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:403444605586:android:d035398d51019b4a503c4b",
+        "android_client_info": {
+          "package_name": "cine.match"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCT5dv2OYANLu1562FmjqCu2opq4LYreKA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
