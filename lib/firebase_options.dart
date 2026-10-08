@@ -2,7 +2,7 @@ import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, kIsWeb, TargetPlatform;
 
-/// Default [FirebaseOptions] generated from google-services.json
+/// Default [FirebaseOptions] generated from google-services.json for project cinematch-bymeet
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
@@ -17,19 +17,19 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyCT5dv2OYANLu1562FmjqCu2opq4LYreKA',
-    appId: '1:403444605586:web:d035398d51019b4a503c4b',
-    messagingSenderId: '403444605586',
-    projectId: 'movie-recommendation-sys-c374e',
-    authDomain: 'movie-recommendation-sys-c374e.firebaseapp.com',
-    storageBucket: 'movie-recommendation-sys-c374e.firebasestorage.app',
+    apiKey: 'AIzaSyBMiH9IJ-9u0GS-AS0PBQnYXq0G04MWdtg',
+    appId: '1:551627410847:web:1b19b3dab7721dd0ec41aa',
+    messagingSenderId: '551627410847',
+    projectId: 'cinematch-bymeet',
+    authDomain: 'cinematch-bymeet.firebaseapp.com',
+    storageBucket: 'cinematch-bymeet.firebasestorage.app',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyCT5dv2OYANLu1562FmjqCu2opq4LYreKA',
-    appId: '1:403444605586:android:d035398d51019b4a503c4b',
-    messagingSenderId: '403444605586',
-    projectId: 'movie-recommendation-sys-c374e',
-    storageBucket: 'movie-recommendation-sys-c374e.firebasestorage.app',
+    apiKey: 'AIzaSyBMiH9IJ-9u0GS-AS0PBQnYXq0G04MWdtg',
+    appId: '1:551627410847:android:1b19b3dab7721dd0ec41aa',
+    messagingSenderId: '551627410847',
+    projectId: 'cinematch-bymeet',
+    storageBucket: 'cinematch-bymeet.firebasestorage.app',
   );
 }

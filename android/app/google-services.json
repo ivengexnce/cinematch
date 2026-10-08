@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "403444605586",
-    "project_id": "movie-recommendation-sys-c374e",
-    "storage_bucket": "movie-recommendation-sys-c374e.firebasestorage.app"
+    "project_number": "551627410847",
+    "project_id": "cinematch-bymeet",
+    "storage_bucket": "cinematch-bymeet.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:403444605586:android:d035398d51019b4a503c4b",
+        "mobilesdk_app_id": "1:551627410847:android:1b19b3dab7721dd0ec41aa",
         "android_client_info": {
           "package_name": "cine.match"
         }
@@ -15,7 +15,26 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyCT5dv2OYANLu1562FmjqCu2opq4LYreKA"
+          "current_key": "AIzaSyBMiH9IJ-9u0GS-AS0PBQnYXq0G04MWdtg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:551627410847:android:b84630a9c6aa588cec41aa",
+        "android_client_info": {
+          "package_name": "com.atblink.atblink"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBMiH9IJ-9u0GS-AS0PBQnYXq0G04MWdtg"
         }
       ],
       "services": {

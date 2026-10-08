@@ -1,7 +1,7 @@
+// ignore_for_file: avoid_print, prefer_const_declarations
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:math';
-import 'dart:convert';
 
 // ─── PNG encoder (stdlib only) ────────────────────────────────────────────────
 Uint8List _makeChunk(List<int> name, List<int> data) {
