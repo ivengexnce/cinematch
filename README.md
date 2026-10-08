@@ -10,7 +10,6 @@
 
 > **Practical 12**: *Develop and Deploy a Complete Flutter Application with a Backend API and Cloud Storage.*  
 > CineMatch is an intelligent movie recommendation and exploration platform built with a high-performance **Flutter** frontend, an asynchronous **Python FastAPI** backend, and **Firebase Cloud Storage** for media uploads.
-
 ---
 
 ## Table of Contents
